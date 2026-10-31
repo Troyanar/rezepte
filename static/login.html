@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Anmelden – Rezepte</title>
+<link rel="icon" href="/static/favicon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="/"><span class="kana" aria-hidden="true">レシピ</span><span class="logo">Rezepte</span><span class="vol">Vol. 01<br>Aus unserer Küche</span></a>
+  <nav class="nav"><a class="tab" href="/">← Rezepte</a></nav>
+</header>
+<main class="main">
+  <section class="login">
+    <div class="koma login-art" aria-hidden="true">
+      <span class="sfx">ドン!</span>
+      <span class="login-big">Bitte<br>eintreten!</span>
+    </div>
+    <form class="koma login-form" method="post" action="/login">
+      <h1 class="box-h">Anmelden</h1>
+      <label class="field">
+        <span class="flabel">Passwort</span>
+        <input class="input" type="password" name="password" autocomplete="current-password" autofocus required>
+      </label>
+      <p class="error" id="msg" role="alert"></p>
+      <button class="btn btn--big btn--red btn--wide" type="submit">Öffnen</button>
+    </form>
+  </section>
+</main>
+<script src="/static/login.js"></script>
+</body>
+</html>

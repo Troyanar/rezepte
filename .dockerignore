@@ -1,0 +1,9 @@
+.venv
+__pycache__
+*.pyc
+.env
+rezepte.db*
+fotos
+data
+*.bat
+deploy_vps.ps1

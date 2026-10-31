@@ -1,0 +1,24 @@
+services:
+  rezepte:
+    build: .
+    container_name: rezepte
+    restart: unless-stopped
+    env_file: .env                  # KI-Modelle usw.; HOST/PORT/Pfade kommen von unten bzw. aus dem Dockerfile
+    environment:
+      HOST: 0.0.0.0
+      PORT: "8300"
+      DB_PATH: /data/rezepte.db
+      PHOTO_DIR: /data/fotos
+      TRUSTED_PROXIES: 172.18.0.0/16   # Docker-Netz des Nginx Proxy Managers (npm_default)
+    volumes:
+      - ./data:/data                # rezepte.db + fotos/ – beim Sichern diesen Ordner mitnehmen
+    ports:
+      - "127.0.0.1:8300:8300"       # nur für Tests auf dem Server; von außen geht's über den Proxy Manager
+    networks:
+      - default
+      - npm                         # damit der Proxy Manager den Container als "rezepte:8300" erreicht
+
+networks:
+  npm:
+    external: true
+    name: npm_default

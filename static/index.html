@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rezepte</title>
+<link rel="icon" href="/static/favicon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="#/"><span class="kana" aria-hidden="true">レシピ</span><span class="logo">Rezepte</span><span class="vol">Vol. 01<br>Aus unserer Küche</span></a>
+  <nav class="nav">
+    <a class="tab" href="#/" data-nav="rezepte" data-recipes hidden>Rezepte</a>
+    <a class="tab" href="#/einkauf" data-nav="einkauf" data-shop hidden>Zettel</a>
+    <a class="tab" href="#/neu" data-nav="neu" data-private hidden>+ Neu</a>
+    <a class="tab" href="#/einstellungen" data-nav="einstellungen" data-private hidden><span class="long">Einstellungen</span><span class="short">Mehr</span></a>
+    <a class="tab tab--login" href="/login" data-guest hidden>Anmelden</a>
+  </nav>
+</header>
+<main class="main" id="view"></main>
+<a class="cartbar" id="cartbar" href="#/einkauf" hidden></a>
+<div class="toast" id="note" role="status"></div>
+<script src="/static/app.js"></script>
+</body>
+</html>
