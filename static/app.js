@@ -3,7 +3,7 @@
 const view = document.getElementById("view");
 // user = angemeldet; ohne Anmeldung gibt es nur die Rezepte zum Lesen
 // publicRecipes/publicShopping: was Besucher ohne Anmeldung sehen dürfen (Einstellungen → Öffentlich)
-const state = { user: false, publicRecipes: false, publicShopping: false, recipes: [], shopping: [], categories: [], q: "", cat: "", ai: { providers: [], default: null }, draft: null, images: [], shopOffers: {}, shopOffersFor: "" };
+const state = { user: false, publicRecipes: false, publicShopping: false, recipes: [], shopping: [], categories: [], servings: 3, q: "", cat: "", diets: [], ai: { providers: [], default: null }, draft: null, images: [], shopOffers: {}, shopOffersFor: "" };
 
 const CART = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 4h2.2l2.3 10.5a1.5 1.5 0 0 0 1.5 1.2h8.4a1.5 1.5 0 0 0 1.5-1.1L21 8H6.3"/><circle cx="9.5" cy="19.5" r="1.3"/><circle cx="17" cy="19.5" r="1.3"/></svg>';
 // Unsplash verlangt bei der Namensnennung Links mit diesen utm-Angaben
@@ -179,135 +179,152 @@ function animalsOf(r) {
 }
 const animalForQuery = (q) => ANIMALS.find((a) => a.alias.includes(q) || a.id.toLowerCase() === q);
 
-// --- Kalorien, grob geschätzt -----------------------------------------------------------
-// kcal pro 100 g und was 1 Stück ("") bzw. 1 EL ungefähr wiegt (TL = ein Drittel EL), ml = Gramm pro ml.
-// Die erste passende Zeile gilt – darum "Sesamöl" vor "Sesam", "Reisessig" vor "Reis", "Zuckerschoten" vor "Zucker".
-const K = (re, k, g = {}) => ({ re, k, g });
+// --- Nährwerte, grob geschätzt ----------------------------------------------------------
+// Je 100 g: [kcal, Eiweiß g, Kohlenhydrate g], dazu was 1 Stück ("") bzw. 1 EL ungefähr wiegt (TL = ein Drittel EL),
+// ml = Gramm pro ml. Die erste passende Zeile gilt – darum "Sesamöl" vor "Sesam", "Reisessig" vor "Reis",
+// "Zuckerschoten" vor "Zucker", "Eiweißpulver" vor "Eiweiß".
+const K = (re, [k, p = 0, c = 0], g = {}) => ({ re, k, p, c, g });
 const KCAL = [
-  K(/wasser(?!melone)|eiswürfel|salz|pfeffer(?!minz)|zimt|chili ?(flocken|pulver)|paprikapulver|kreuzkümmel|gewürz|backpulver|natron|vanille|petersilie|schnittlauch|koriander|basilikum|minze|dill|thymian|rosmarin|lorbeer|grüntee|teebeutel|tee-beutel|dashi|hondashi/, 0),
-  K(/brühe|bouillon|fond\b/, 5, { würfel: 500 }),  // ein Würfel ergibt etwa einen halben Liter
-  K(/curry.?roux|curry.?block|curry.?würfel/, 510, { "": 20, würfel: 20 }),
-  K(/currypulver|curry pulver/, 325, { el: 6 }),
-  K(/öl(?![a-zäöüß])/, 884, { el: 12, ml: 0.92 }),
-  K(/schmalz/, 900, { el: 13 }),
-  K(/butternut|kürbis/, 40, { "": 1000 }),
-  K(/buttermilch/, 38),
-  K(/butter/, 740, { el: 15 }),
-  K(/mayo/, 680, { el: 14 }),
-  K(/soja ?sauce|soja ?soße|sojasosse|shoyu|tamari/, 55, { el: 16 }),
-  K(/fisch ?(sauce|soße)/, 35),
-  K(/austern ?(sauce|soße)/, 120, { el: 18 }),
-  K(/worcester/, 80),
-  K(/ketchup/, 100, { el: 17 }),
-  K(/teriyaki/, 90, { el: 18 }),
-  K(/tonkatsu ?(sauce|soße)|bulldog|okonomi|bbq|barbecue/, 130, { el: 18 }),
-  K(/sriracha|chilisauce|chilisoße|gochujang/, 150, { el: 17 }),
-  K(/essig/, 20),
-  K(/senf/, 90),
-  K(/miso/, 200, { el: 18 }),
-  K(/mirin/, 240),
-  K(/sake|(?<!sch)wein(?!stein)/, 80),  // nicht "Schweinelende"
-  K(/honig/, 304, { el: 21 }),
-  K(/ahornsirup|agavendicksaft|sirup/, 260, { el: 20 }),
-  K(/zuckerschote/, 42, { "": 4 }),
-  K(/zucker/, 400, { el: 13 }),
-  K(/stärke|kartoffelmehl/, 350, { el: 10 }),
-  K(/panko|paniermehl|brösel/, 370, { el: 5, ml: 0.25 }),
-  K(/haferflocken/, 370, { el: 8 }),
-  K(/reisnudel|glasnudel/, 350),
-  K(/udon/, 130, { "": 200, "pck.": 200 }),  // vorgekocht aus der Packung
-  K(/soba/, 340, { bund: 100 }),
-  K(/ramen|nudel|spaghetti|pasta|makkaroni/, 350, { bund: 100 }),
-  K(/mehl/, 350, { el: 10 }),
-  Object.assign(K(/(?<!p)reis/, 350, { "": 150, becher: 150, tasse: 150, el: 12, ml: 0.85 }), { rice: 130 }),
-  K(/toast|brot|brötchen|semmel/, 260, { "": 60, scheibe: 30 }),
-  K(/eigelb/, 320, { "": 18 }),
-  K(/eiweiß|eiklar/, 50, { "": 33 }),
-  K(/(^|[^a-zäöüß])ei(er)?([^a-zäöüß]|$)/, 150, { "": 55 }),
-  K(/milch/, 64),
-  K(/sahne/, 300),
-  K(/schmand|crème fraîche|creme fraiche|saure sahne/, 250),
-  K(/skyr|magerquark/, 65),
-  K(/joghurt|quark/, 90),
-  K(/parmesan/, 400, { el: 6 }),
-  K(/mozzarella/, 250, { "": 125 }),
-  K(/käse|cheddar|gouda/, 350, { scheibe: 20 }),
-  K(/seidentofu/, 55, { "": 300 }),
-  K(/tofu/, 120, { "": 400 }),
-  K(/schweinebauch|bauchfleisch/, 500),
-  K(/speck|bacon|pancetta/, 450, { scheibe: 15 }),
-  K(/schinken/, 120, { scheibe: 15 }),
-  K(/spam|luncheon|frühstücksfleisch/, 300, { scheibe: 30 }),
-  K(/salami|chorizo/, 400, { scheibe: 5 }),
-  K(/wurst|würstchen/, 280, { "": 50 }),
-  K(/hack.*(huhn|hühn|hähnchen|pute|geflügel)|(huhn|hühn|hähnchen|pute|geflügel).*hack/, 150),
-  K(/hack(?!t)|\bmett/, 250),  // nicht "Walnüsse, gehackt"
-  K(/schwein|kotelett|schnitzel/, 170, { "": 120 }),
-  K(/kalb/, 120, { "": 150 }),
-  K(/rind|steak|beef|ribeye|entrec/, 200, { "": 200 }),
-  K(/brust/, 110, { "": 200 }),  // Hähnchen- oder Putenbrust
-  K(/schenkel|keule/, 180, { "": 150 }),
-  K(/huhn|hühn|hähnchen|chicken|geflügel|pute|truthahn/, 150, { "": 150 }),
-  K(/\bente|enten|gans\b|gänse/, 230, { "": 200 }),
-  K(/lamm|schaf/, 250, { "": 150 }),
-  K(/lachs/, 200, { "": 125, scheibe: 20 }),
-  K(/makrele|hering|sardine/, 200, { "": 120 }),
-  K(/thunfisch|tuna/, 130, { dose: 150 }),
-  K(/garnele|shrimp|scampi|krabbe|gamba/, 80, { "": 15 }),
-  K(/surimi|krebsfleisch|kanikama/, 95, { "": 17 }),
-  K(/fisch|kabeljau|dorsch|seelachs|zander|scholle|forelle|tilapia|pangasius/, 90, { "": 150 }),
-  K(/süßkartoffel/, 86, { "": 250 }),
-  K(/kartoffel/, 77, { "": 150 }),
-  K(/karotte|möhre/, 36, { "": 80 }),
-  K(/frühlingszwiebel|lauchzwiebel/, 30, { "": 15, bund: 100 }),
-  K(/zwiebel|schalotte/, 40, { "": 100 }),
-  K(/lauch|porree/, 30, { "": 200 }),
-  K(/knoblauch/, 140, { "": 4, el: 12 }),
-  K(/ingwer/, 80, { "": 10 }),
-  K(/kohl|wirsing/, 25, { "": 800 }),
-  K(/rettich|daikon/, 18, { "": 400 }),
-  K(/radieschen/, 16, { "": 10, bund: 150 }),
-  K(/babygurke|mini-?gurke|snackgurke/, 14, { "": 80 }),
-  K(/gurke/, 14, { "": 300 }),
-  K(/tomate/, 18, { "": 100, dose: 400 }),
-  K(/aubergine/, 25, { "": 300 }),
-  K(/zucchini/, 20, { "": 250 }),
-  K(/paprika/, 30, { "": 160 }),
-  K(/pilz|champignon|shiitake|enoki|shimeji/, 25, { "": 15 }),
-  K(/spinat/, 23),
-  K(/sprossen/, 30),
-  K(/grüne bohnen|brechbohnen|stangenbohnen|buschbohnen/, 30),
-  K(/bohnen|erbsen|edamame/, 60),
-  K(/mais/, 85, { dose: 285 }),
-  K(/brokkoli|blumenkohl/, 30, { "": 400 }),
-  K(/avocado/, 160, { "": 150 }),
-  K(/salat/, 15, { "": 10 }),
-  K(/zitronensaft|limettensaft/, 25),
-  K(/zitrone|limette/, 30, { "": 80 }),
-  K(/chili/, 40, { "": 10 }),
-  K(/nori/, 300, { "": 3 }),
-  K(/wakame|algen/, 200, { el: 3 }),
-  K(/beere|erdbeer|himbeer|heidelbeer/, 45),
-  K(/apfel/, 52, { "": 180 }),
-  K(/banane/, 90, { "": 120 }),
-  K(/sesam/, 570, { el: 9 }),
-  K(/erdnussbutter|erdnussmus/, 600, { el: 16 }),
-  K(/walnüss|walnuss|mandel|haselnüss|haselnuss|erdnüss|erdnuss|cashew|nüsse/, 620, { el: 8 }),
-  K(/leinsamen|chiasamen|chia/, 500, { el: 10 }),
-  K(/kakao/, 350, { el: 8 }),
-  K(/schokolade/, 540),
-  K(/gelatine/, 340, { "": 1.7 }),
+  K(/wasser(?!melone)|eiswürfel|salz|pfeffer(?!minz)|zimt|chili ?(flocken|pulver)|paprikapulver|kreuzkümmel|gewürz|backpulver|natron|vanille|petersilie|schnittlauch|koriander|basilikum|minze|dill|thymian|rosmarin|lorbeer|grüntee|teebeutel|tee-beutel|dashi|hondashi/, [0]),
+  K(/brühe|bouillon|fond\b/, [5, 0.5, 0.5], { würfel: 500 }),  // ein Würfel ergibt etwa einen halben Liter
+  K(/curry.?roux|curry.?block|curry.?würfel/, [510, 6, 45], { "": 20, würfel: 20 }),
+  K(/currypulver|curry pulver/, [325, 13, 25], { el: 6 }),
+  K(/öl(?![a-zäöüß])/, [884], { el: 12, ml: 0.92 }),
+  K(/schmalz/, [900], { el: 13 }),
+  K(/butternut|kürbis/, [40, 1, 8], { "": 1000 }),
+  K(/buttermilch/, [38, 3.5, 4]),
+  K(/erdnussbutter|erdnussmus/, [600, 25, 15], { el: 16 }),
+  K(/butter/, [740, 0.7, 0.6], { el: 15 }),
+  K(/mayo/, [680, 1, 1.5], { el: 14 }),
+  K(/soja ?sauce|soja ?soße|sojasosse|shoyu|tamari/, [55, 8, 5], { el: 16 }),
+  K(/fisch ?(sauce|soße)/, [35, 5, 4]),
+  K(/austern ?(sauce|soße)/, [120, 2, 25], { el: 18 }),
+  K(/worcester/, [80, 0, 19]),
+  K(/ketchup/, [100, 1.2, 23], { el: 17 }),
+  K(/teriyaki/, [90, 6, 16], { el: 18 }),
+  K(/tonkatsu ?(sauce|soße)|bulldog|okonomi|bbq|barbecue/, [130, 1, 30], { el: 18 }),
+  K(/sriracha|chilisauce|chilisoße|gochujang/, [150, 3, 30], { el: 17 }),
+  K(/essig/, [20, 0, 1]),
+  K(/senf/, [90, 6, 5]),
+  K(/miso/, [200, 12, 26], { el: 18 }),
+  K(/mirin/, [240, 0.3, 43]),
+  K(/sake|(?<!sch)wein(?!stein)/, [80, 0.1, 3]),  // nicht "Schweinelende"
+  K(/honig/, [304, 0.3, 82], { el: 21 }),
+  K(/ahornsirup|agavendicksaft|sirup/, [260, 0, 67], { el: 20 }),
+  K(/zuckerschote/, [42, 3, 7], { "": 4 }),
+  K(/zucker/, [400, 0, 100], { el: 13 }),
+  K(/stärke|kartoffelmehl/, [350, 0.3, 87], { el: 10 }),
+  K(/panko|paniermehl|brösel/, [370, 11, 75], { el: 5, ml: 0.25 }),
+  K(/haferflocken/, [370, 13.5, 59], { el: 8 }),
+  K(/kokos(nuss)? ?milch/, [180, 2, 3], { dose: 400 }),
+  K(/(hafer|soja|mandel|reis) ?(milch|drink)/, [45, 2, 5]),
+  K(/reisnudel|glasnudel/, [350, 3, 83]),
+  K(/udon/, [130, 3, 26], { "": 200, "pck.": 200 }),  // vorgekocht aus der Packung
+  K(/soba/, [340, 14, 70], { bund: 100 }),
+  K(/gnocchi/, [150, 3.5, 32]),
+  K(/ramen|nudel|spaghetti|pasta|makkaroni|penne|fusilli|tagliatelle|lasagne/, [350, 12.5, 70], { bund: 100 }),
+  K(/couscous|bulgur|quinoa/, [350, 12, 65]),
+  K(/mehl/, [350, 10, 72], { el: 10 }),
+  Object.assign(K(/(?<!p)reis/, [350, 7, 78], { "": 150, becher: 150, tasse: 150, el: 12, ml: 0.85 }), { rice: [130, 2.7, 28] }),
+  K(/tortilla|wrap/, [300, 8, 50], { "": 60 }),
+  K(/toast|brot|brötchen|semmel/, [260, 8.5, 48], { "": 60, scheibe: 30 }),
+  K(/protein ?pulver|eiweiß ?pulver|whey/, [380, 75, 8], { el: 10, "": 30 }),  // "": ein Messlöffel
+  K(/eigelb/, [320, 16, 0.5], { "": 18 }),
+  K(/eiweiß|eiklar/, [50, 11, 0.7], { "": 33 }),
+  K(/(^|[^a-zäöüß])ei(er)?([^a-zäöüß]|$)/, [150, 13, 0.7], { "": 55 }),
+  K(/milch/, [64, 3.4, 4.8]),
+  K(/sahne/, [300, 2.4, 3.2]),
+  K(/schmand|crème fraîche|creme fraiche|saure sahne/, [250, 2.6, 3.5]),
+  K(/skyr|magerquark|protein ?(pudding|joghurt|quark)/, [65, 11, 4]),
+  K(/quark/, [110, 12, 3]),
+  K(/joghurt|jogurt/, [70, 4, 5]),
+  K(/hüttenkäse|körniger frischkäse/, [100, 12, 3]),
+  K(/frischkäse/, [250, 6, 3]),
+  K(/parmesan|pecorino|grana padano/, [400, 35, 0], { el: 6 }),
+  K(/mozzarella/, [250, 18, 1], { "": 125 }),
+  K(/feta|hirtenkäse|halloumi/, [270, 18, 1], { "": 200 }),
+  K(/käse|cheddar|gouda/, [350, 25, 0.5], { scheibe: 20 }),
+  K(/seidentofu/, [55, 5, 2], { "": 300 }),
+  K(/tofu/, [120, 13, 1], { "": 400 }),
+  K(/schweinebauch|bauchfleisch/, [500, 10, 0]),
+  K(/speck|bacon|pancetta/, [450, 15, 0], { scheibe: 15 }),
+  K(/schinken/, [120, 20, 1], { scheibe: 15 }),
+  K(/spam|luncheon|frühstücksfleisch/, [300, 13, 3], { scheibe: 30 }),
+  K(/salami|chorizo/, [400, 22, 1], { scheibe: 5 }),
+  K(/wurst|würstchen/, [280, 13, 1], { "": 50 }),
+  K(/hack.*(huhn|hühn|hähnchen|pute|geflügel)|(huhn|hühn|hähnchen|pute|geflügel).*hack/, [150, 20, 0]),
+  K(/hack(?!t)|\bmett/, [250, 18, 0]),  // nicht "Walnüsse, gehackt"
+  K(/schwein|kotelett|schnitzel/, [170, 21, 0], { "": 120 }),
+  K(/kalb/, [120, 21, 0], { "": 150 }),
+  K(/rind|steak|beef|ribeye|entrec/, [200, 22, 0], { "": 200 }),
+  K(/brust/, [110, 23, 0], { "": 200 }),  // Hähnchen- oder Putenbrust
+  K(/schenkel|keule/, [180, 18, 0], { "": 150 }),
+  K(/huhn|hühn|hähnchen|chicken|geflügel|pute|truthahn/, [150, 21, 0], { "": 150 }),
+  K(/\bente|enten|gans\b|gänse/, [230, 18, 0], { "": 200 }),
+  K(/lamm|schaf/, [250, 17, 0], { "": 150 }),
+  K(/lachs/, [200, 20, 0], { "": 125, scheibe: 20 }),
+  K(/makrele|hering|sardine/, [200, 19, 0], { "": 120 }),
+  K(/thunfisch|tuna/, [130, 26, 0], { dose: 150 }),
+  K(/garnele|shrimp|scampi|krabbe|gamba/, [80, 18, 0], { "": 15 }),
+  K(/surimi|krebsfleisch|kanikama/, [95, 8, 13], { "": 17 }),
+  K(/fisch|kabeljau|dorsch|seelachs|zander|scholle|forelle|tilapia|pangasius/, [90, 19, 0], { "": 150 }),
+  K(/süßkartoffel/, [86, 1.6, 20], { "": 250 }),
+  K(/kartoffel/, [77, 2, 17], { "": 150 }),
+  K(/karotte|möhre/, [36, 0.9, 6], { "": 80 }),
+  K(/frühlingszwiebel|lauchzwiebel/, [30, 1.8, 5], { "": 15, bund: 100 }),
+  K(/zwiebel|schalotte/, [40, 1.1, 8], { "": 100 }),
+  K(/lauch|porree/, [30, 2, 4], { "": 200 }),
+  K(/knoblauch/, [140, 6, 28], { "": 4, el: 12 }),
+  K(/ingwer/, [80, 1.8, 16], { "": 10 }),
+  K(/kohl|wirsing/, [25, 1.5, 4], { "": 800 }),
+  K(/rettich|daikon/, [18, 0.6, 3], { "": 400 }),
+  K(/radieschen/, [16, 0.7, 2], { "": 10, bund: 150 }),
+  K(/babygurke|mini-?gurke|snackgurke/, [14, 0.6, 2], { "": 80 }),
+  K(/gurke/, [14, 0.6, 2], { "": 300 }),
+  K(/tomate/, [18, 0.9, 3], { "": 100, dose: 400 }),
+  K(/aubergine/, [25, 1, 3], { "": 300 }),
+  K(/zucchini/, [20, 1.5, 2.5], { "": 250 }),
+  K(/paprika/, [30, 1, 5], { "": 160 }),
+  K(/pilz|champignon|shiitake|enoki|shimeji/, [25, 3, 0.5], { "": 15 }),
+  K(/spinat/, [23, 2.9, 0.6]),
+  K(/sprossen/, [30, 3, 4]),
+  K(/grüne bohnen|brechbohnen|stangenbohnen|buschbohnen/, [30, 2, 5]),
+  K(/edamame/, [120, 11, 5]),
+  K(/linsen/, [340, 24, 50]),  // meist getrocknet abgewogen
+  K(/kichererbsen|bohnen/, [100, 7, 14], { dose: 240 }),  // aus der Dose, abgetropft
+  K(/erbsen/, [80, 5, 11]),
+  K(/mais/, [85, 3, 15], { dose: 285 }),
+  K(/brokkoli|blumenkohl/, [30, 3.5, 3], { "": 400 }),
+  K(/avocado/, [160, 2, 2], { "": 150 }),
+  K(/salat/, [15, 1.3, 1.5], { "": 10 }),
+  K(/zitronensaft|limettensaft/, [25, 0.4, 7]),
+  K(/zitrone|limette/, [30, 0.7, 3], { "": 80 }),
+  K(/chili/, [40, 2, 7], { "": 10 }),
+  K(/nori/, [300, 35, 10], { "": 3 }),
+  K(/wakame|algen/, [200, 15, 30], { el: 3 }),
+  K(/beere|erdbeer|himbeer|heidelbeer/, [45, 1, 8]),
+  K(/apfel/, [52, 0.3, 12], { "": 180 }),
+  K(/banane/, [90, 1.1, 21], { "": 120 }),
+  K(/sesam/, [570, 18, 10], { el: 9 }),
+  K(/walnüss|walnuss|mandel|haselnüss|haselnuss|erdnüss|erdnuss|cashew|nüsse/, [620, 18, 10], { el: 8 }),
+  K(/leinsamen|chiasamen|chia/, [500, 20, 8], { el: 10 }),
+  K(/kakao/, [350, 20, 11], { el: 8 }),
+  K(/schokolade/, [540, 6, 55]),
+  K(/gelatine/, [340, 85, 0], { "": 1.7 }),
 ];
 const UNIT_G = { g: 1, kg: 1000, ml: 1, cl: 10, l: 1000, el: 15, prise: 0.4, msp: 0.3, "msp.": 0.3,
   zehe: 4, scheibe: 25, dose: 250, becher: 150, tasse: 150, bund: 30, "pck.": 200, würfel: 10 };
 const VOLUME = { ml: 1, cl: 10, l: 1000 };
 const SPRINKLE = /nori|algen|sesam(?!öl)|mandelblättchen|topping|garnier/;
+// Sättigungsbeilage ohne Menge ("Reis zum Servieren"): Kohlenhydrate unbekannt, aber sicher nicht wenig
+const STAPLE = /(?<!p)reis(?!essig|wein)|nudel|spaghetti|pasta|brot|brötchen|toast|kartoffel|tortilla|wrap|couscous|bulgur|quinoa|gnocchi|udon|soba|ramen|panko|paniermehl|brösel/;
 
-/** Grob die Kalorien eines Rezepts: gesamt, pro Person (wenn die Personenzahl bekannt ist) und was fehlt. */
-const kcalCache = new WeakMap();
-function kcalOf(r) {
-  if (kcalCache.has(r)) return kcalCache.get(r);
-  let total = 0, counted = 0;
+/** Grob die Nährwerte eines Rezepts: kcal, Eiweiß und Kohlenhydrate (g) gesamt und pro Person
+ *  (wenn die Personenzahl bekannt ist), was fehlt – und ob für Eiweiß/Kohlenhydrate genug bekannt ist. */
+const nutrCache = new WeakMap();
+function nutrOf(r) {
+  if (nutrCache.has(r)) return nutrCache.get(r);
+  let total = 0, protein = 0, carbs = 0, counted = 0, unknown = false, staple = false;
   const missing = new Set();
   for (const i of r.ingredients) {
     const name = i.name.replace(USE_NOTE, ""), n = name.toLowerCase();
@@ -315,7 +332,12 @@ function kcalOf(r) {
     if (e && e.k === 0) continue;               // Wasser, Salz, Gewürze, Kräuter
     // ohne Menge und kaum der Rede wert: "Salat nach Wahl", Ingwer, Sesam oder Nori zum Bestreuen
     if (e && i.amount == null && (e.k < 100 || SPRINKLE.test(n))) continue;
-    if (!e || i.amount == null) { missing.add(name); continue; }
+    if (!e || i.amount == null) {
+      missing.add(name);
+      if (!e && i.amount != null) unknown = true;
+      if (i.amount == null && STAPLE.test(n)) staple = true;
+      continue;
+    }
     let u = i.unit.toLowerCase();
     if (["stk.", "stk", "stück"].includes(u)) u = "";
     let grams = null;
@@ -324,20 +346,97 @@ function kcalOf(r) {
     else if (u === "tl") grams = i.amount * (e.g.el ?? UNIT_G.el) / 3;
     else if (u === "" && /(\d+(?:[.,]\d+)?)\s*g\b/.test(n)) grams = i.amount * parseFloat(n.match(/(\d+(?:[.,]\d+)?)\s*g\b/)[1].replace(",", "."));
     else if (UNIT_G[u] != null) grams = i.amount * UNIT_G[u];
-    if (grams == null) { missing.add(name); continue; }
-    let k = e.k;
+    if (grams == null) { missing.add(name); unknown = true; continue; }
+    let { k, p, c } = e;
     // Reis: in Gramm meist schon gekocht (200 g für eine Schüssel), Becher/EL/ml meinen rohen Reis
     if (e.rice && !/roh|ungekocht|trocken/.test(n)
-        && (/gekocht|warm|gedämpft/.test(n) || u === "" || (u === "g" && grams / (r.servings || 1) >= 120))) k = e.rice;
+        && (/gekocht|warm|gedämpft/.test(n) || u === "" || (u === "g" && grams / (r.servings || 1) >= 120))) [k, p, c] = e.rice;
     total += grams * k / 100;
+    protein += grams * p / 100;
+    carbs += grams * c / 100;
     counted++;
   }
-  const res = counted && total >= 20
-    ? { total, perServing: r.servings ? total / r.servings : null, missing: [...missing] } : null;
-  kcalCache.set(r, res);
+  const per = (x) => r.servings ? x / r.servings : null;
+  const res = counted && total >= 20 ? {
+    total, protein, carbs, perServing: per(total), proteinPer: per(protein), carbsPer: per(carbs),
+    missing: [...missing], unknown, staple,
+  } : null;
+  nutrCache.set(r, res);
   return res;
 }
 const fmtKcal = (k) => "≈ " + (Math.round(k / 10) * 10).toLocaleString("de-DE");
+const fmtGram = (g) => "≈ " + Math.round(g).toLocaleString("de-DE") + " g";
+
+// --- Umrechnen auf andere Personenzahl ----------------------------------------------------
+// Gerundet, wie man abwiegt: Gramm auf 5 bzw. 10, Löffel auf halbe, Eier auf ganze, Stück auf halbe.
+const near = (v, step) => Math.round(v / step) * step;
+const EGG = /(^|[^a-zäöüß])(ei|eier|eigelb|eiweiß)([^a-zäöüß]|$)/;
+function scaleAmount(amount, unit, name, factor) {
+  if (amount == null || factor === 1) return amount;
+  const a = amount * factor, u = unit.toLowerCase();
+  let v;
+  if (u === "g" || u === "ml") v = a < 10 ? Math.max(near(a, 0.5), 0.5) : a < 100 ? near(a, 5) : near(a, 10);
+  else if (u === "kg" || u === "l") v = Math.max(near(a, 0.05), 0.05);
+  else if (u === "el" || u === "tl") v = a < 1 ? Math.max(near(a, 0.25), 0.25) : near(a, 0.5);
+  else if (u === "prise" || u === "msp." || u === "msp") v = Math.max(Math.round(a), 1);
+  else if (EGG.test(name.replace(USE_NOTE, "").toLowerCase())) v = Math.max(Math.round(a), 1);
+  else v = Math.max(near(a, 0.5), 0.5);  // Stück, Zehe, Dose, Bund …
+  return Math.round(v * 1000) / 1000;
+}
+const scaleIngredients = (ings, factor) => ings.map((i) => ({ ...i, amount: scaleAmount(i.amount, i.unit, i.name, factor) }));
+
+// --- Ernährung: Vegan, Vegetarisch, Low Carb, High Protein, Schnell ----------------------
+// Wird aus Zutaten, Nährwerten und Zeit erkannt; was falsch erkannt ist, lässt sich im Rezept
+// von Hand umstellen (r.tags: { "Vegan": false, … } – nur die Abweichungen werden gespeichert).
+const DIETS = ["Vegan", "Vegetarisch", "Low Carb", "High Protein", "Schnell"];
+const DIET_HINTS = {
+  "Vegan": "Ohne Fleisch, Fisch, Milch, Ei und Honig",
+  "Vegetarisch": "Ohne Fleisch und Fisch (auch keine Fleischbrühe, Fischsauce oder Gelatine)",
+  "Low Carb": "Höchstens 20 g Kohlenhydrate pro Person und weniger als 30 % der Kalorien",
+  "High Protein": "Mindestens 25 % der Kalorien aus Eiweiß und 20 g pro Person",
+  "Schnell": "In höchstens 30 Minuten fertig",
+};
+// Nicht vegetarisch, auch wenn kein Fleisch dasteht (Brühen und Soßen zählen hier mit, anders als bei den Tieren)
+const NOT_VEGGIE = /fisch ?(sauce|soße)|austern ?(sauce|soße)|worcester|gelatine|dashi|bonito|katsuobushi|sardell|anchovi|kaviar|rogen|(?<!butter)schmalz|fleischbrühe|\bfond\b/;
+const NOT_VEGAN = /milch|butter|sahne|käse|parmesan|pecorino|grana padano|mozzarella|feta|ricotta|mascarpone|burrata|halloumi|joghurt|jogurt|quark|skyr|schmand|crème fraîche|creme fraiche|ghee|molke|whey|kefir|honig|mayo|eigelb|eiweiß|eiklar|eiernudel|mie.?nudel|spätzle|protein ?pulver|(^|[^a-zäöüß])ei(er)?([^a-zäöüß]|$)/;
+// Ersatzprodukte: "Soja-Hack", "vegane Wurst", "Tofu-Würstchen"
+const MEAT_FREE = /vegan|vegetar|veggie|pflanzlich|tofu|seitan|soja/;
+// "vegane Mayo", Hafermilch, Erdnussbutter, Kokosmilch, Butternut …
+const PLANT = /vegan|pflanzlich|soja|tofu|seitan|hafer|mandel|kokos|reis ?(milch|drink)|nuss|cashew|kakao|butternut|butterkürbis|erbsenprotein/;
+
+const dietCache = new WeakMap();
+/** Was das Rezept nach den Zutaten wäre, ohne Handkorrektur. */
+function dietAuto(r) {
+  if (dietCache.has(r)) return dietCache.get(r);
+  const names = r.ingredients.map((i) => i.name.replace(USE_NOTE, "").toLowerCase());
+  const veggie = names.every((n) => MEAT_FREE.test(n) || (!animalsOfName(n).length && !NOT_VEGGIE.test(n)
+    && !(/brühe|bouillon|fond|brühwürfel/.test(n) && ANIMALS.some((a) => a.specific.test(n)))));
+  const vegan = veggie && names.every((n) => PLANT.test(n) || !NOT_VEGAN.test(n));
+  const nu = nutrOf(r), sure = nu && !nu.unknown;
+  const share = (g, kcal) => g * 4 / kcal;  // Anteil der Kalorien
+  const res = {
+    "Vegan": names.length > 0 && vegan,
+    "Vegetarisch": names.length > 0 && veggie,
+    "Low Carb": !!sure && !nu.staple && share(nu.carbs, nu.total) < 0.3 && (nu.carbsPer ?? 0) <= 20
+      && (nu.carbsPer != null || share(nu.carbs, nu.total) < 0.2),
+    "High Protein": !!sure && share(nu.protein, nu.total) >= 0.25 && (nu.proteinPer ?? nu.protein) >= 20,
+    "Schnell": !!r.minutes && r.minutes <= 30,
+  };
+  dietCache.set(r, res);
+  return res;
+}
+
+/** Tags des Rezepts: erkannt, mit den Handkorrekturen darüber. Vegan heißt immer auch vegetarisch. */
+function dietOf(r) {
+  const auto = dietAuto(r), fix = r.tags || {};
+  const on = Object.fromEntries(DIETS.map((d) => [d, fix[d] ?? auto[d]]));
+  if (on["Vegan"]) on["Vegetarisch"] = true;
+  return on;
+}
+const dietsOf = (r) => DIETS.filter((d) => dietOf(r)[d]);
+const DIET_COLORS = { "Vegan": "#3fae49", "Vegetarisch": "#a6d84a", "Low Carb": "#38bdf8", "High Protein": "#ff7a00", "Schnell": "#ffd23a" };
+/** Kleine Tags fürs Panel: "Vegan" sagt schon "vegetarisch", die Zeit steht im Stern. */
+const cardDiets = (r) => dietsOf(r).filter((d) => d !== "Schnell" && !(d === "Vegetarisch" && dietOf(r)["Vegan"]));
 
 const ICONS = {
   pen: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="m13 7 4 4"/></svg>',
@@ -446,7 +545,7 @@ function picHtml(r, size = "small") {
 // --- Ansicht: Rezepte ---------------------------------------------------------------
 // Eine Rezept-Kachel ist ein Manga-Panel ("Koma"): dicker Rahmen, Foto als Rasterdruck, Zeit im Stern.
 function cardHtml(r, i, big) {
-  const kcal = kcalOf(r);
+  const kcal = nutrOf(r);
   return `
     <article class="koma${big ? " big" : ""}" style="--c:${catColor(r.category)}">
       <div class="pic">${picHtml(r)}</div>
@@ -455,6 +554,7 @@ function cardHtml(r, i, big) {
         <span class="ep">第${i + 1}話${r.category ? ` · ${esc(r.category)}` : ""}</span>
         <a class="name" href="#/r/${r.id}">${esc(r.title)}</a>
         ${kcal?.perServing ? `<span class="kc" title="grob geschätzt">${fmtKcal(kcal.perServing)} kcal p. P.</span>` : ""}
+        ${cardDiets(r).length ? `<span class="dts">${cardDiets(r).map((d) => `<span class="dt" style="--c:${DIET_COLORS[d]}">${esc(d)}</span>`).join("")}</span>` : ""}
       </div>
       ${state.user ? `<button class="add" data-cart="${r.id}" title="Zutaten auf den Zettel" aria-label="Zutaten von ${esc(r.title)} auf den Zettel">${CART}</button>` : ""}
     </article>`;
@@ -469,7 +569,8 @@ function renderRecipes() {
   const q = state.q.trim().toLowerCase();
   // "schwein", "rind", "fisch" …: alle Rezepte mit Fleisch von diesem Tier, egal welches Stück
   const animal = animalForQuery(q);
-  const hits = all.filter((r) => (!state.cat || (r.category || OTHER) === state.cat)
+  const fits = (r) => state.diets.every((d) => dietOf(r)[d]);
+  const hits = all.filter((r) => (!state.cat || (r.category || OTHER) === state.cat) && fits(r)
     && (!q || (animal && animalsOf(r).has(animal.id))
         || r.title.toLowerCase().includes(q) || r.ingredients.some((i) => i.name.toLowerCase().includes(q))));
   const order = [...state.categories, OTHER];
@@ -481,8 +582,8 @@ function renderRecipes() {
       <h2 class="ch-h"><span class="ch-no">${no}</span><span class="ch-t">${head}</span><span class="ch-n">×${list.length}</span></h2>
       <div class="komas${list.length >= 3 ? " has-big" : ""}">${list.map((r, i) => cardHtml(r, i, i === 0 && list.length >= 3)).join("")}</div>
     </section>`;
-  if (!q && !state.cat) {
-    return order.map((c) => [c, all.filter((r) => (r.category || OTHER) === c)])
+  if (!q && !state.cat && hits.length) {
+    return order.map((c) => [c, hits.filter((r) => (r.category || OTHER) === c)])
       .filter(([, l]) => l.length).map(([c, list], k) => chapter(`第${k + 1}章`, esc(c), catColor(c), list)).join("");
   }
   if (!hits.length) {
@@ -500,6 +601,16 @@ function meatsHtml() {
   return `<div class="meats" id="meats"><span class="meats-k">Fleisch &amp; Fisch</span>
     ${counts.map(([a, n]) => `<button class="meat" data-animal="${esc(a.id)}" aria-pressed="${active === a}" title="Alle Rezepte mit ${esc(a.id)}">
       <span class="nm">${esc(a.id)}</span><span class="ct">${n}</span></button>`).join("")}
+  </div>`;
+}
+
+/** Reiter "Ernährung": mehrere gleichzeitig wählbar (Vegan + High Protein = beides). */
+function dietsHtml() {
+  const counts = DIETS.map((d) => [d, state.recipes.filter((r) => dietOf(r)[d]).length]).filter(([, n]) => n);
+  if (!counts.length) return "";
+  return `<div class="meats diets" id="diets"><span class="meats-k">Ernährung</span>
+    ${counts.map(([d, n]) => `<button class="meat" data-diet="${esc(d)}" aria-pressed="${state.diets.includes(d)}" style="--c:${DIET_COLORS[d]}" title="${esc(DIET_HINTS[d])}">
+      <span class="nm">${esc(d)}</span><span class="ct">${n}</span></button>`).join("")}
   </div>`;
 }
 
@@ -528,6 +639,7 @@ function showList() {
         ${row("", "Alles", n, "var(--ink)")}
         ${cats.map((c) => row(c, esc(c), count(c), catColor(c))).join("")}
       </div>` : ""}
+      ${dietsHtml()}
       ${meatsHtml()}
       <div id="list">${renderRecipes()}</div>
     </div>`;
@@ -546,6 +658,14 @@ function showList() {
     syncMeats();
     document.getElementById("list").innerHTML = renderRecipes();
   });
+  document.getElementById("diets")?.addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-diet]");
+    if (!btn) return;
+    const d = btn.dataset.diet;
+    state.diets = state.diets.includes(d) ? state.diets.filter((x) => x !== d) : [...state.diets, d];
+    btn.setAttribute("aria-pressed", String(state.diets.includes(d)));
+    document.getElementById("list").innerHTML = renderRecipes();
+  });
   document.getElementById("cats")?.addEventListener("click", (e) => {
     const btn = e.target.closest("[data-cat]");
     if (!btn) return;
@@ -561,7 +681,7 @@ function showRecipe(id) {
   if (!r) { view.innerHTML = `<div class="empty"><span class="empty-h">Nicht da</span><p>Dieses Rezept gibt es nicht.</p><a class="btn" href="#/">Zu den Rezepten</a></div>`; return; }
   let servings = r.servings;
   let offers = [];  // je Zutat (gleiche Reihenfolge) die Angebote, sobald sie da sind
-  const kcal = kcalOf(r);
+  const kcal = nutrOf(r);
 
   const bonHtml = () => r.ingredients.map((i, k) => {
     const amount = i.amount != null && servings && r.servings ? i.amount * servings / r.servings : i.amount;
@@ -575,13 +695,18 @@ function showRecipe(id) {
         ${r.image.large.startsWith("/fotos/") ? "" : `<span class="credit">Foto von ${r.image.url ? `<a href="${esc(r.image.url)}" target="_blank" rel="noopener">${esc(r.image.by || "Unbekannt")}</a>` : esc(r.image.by || "Unbekannt")}
           auf <a href="${UNSPLASH}" target="_blank" rel="noopener">Unsplash</a></span>`}` : picHtml(r, "large")}</div></figure>
       <div class="koma title-koma"><div class="in">
-        ${r.category ? `<span class="label" style="--c:${catColor(r.category)}">${esc(r.category)}</span>` : ""}
+        ${r.category || dietsOf(r).length ? `<div class="labels">
+          ${r.category ? `<span class="label" style="--c:${catColor(r.category)}">${esc(r.category)}</span>` : ""}
+          ${dietsOf(r).map((d) => `<a class="label label--diet" href="#/" data-go-diet="${esc(d)}" style="--c:${DIET_COLORS[d]}" title="${esc(DIET_HINTS[d])}">${esc(d)}</a>`).join("")}
+        </div>` : ""}
         <h1 class="r-title">${esc(r.title)}</h1>
         ${r.source ? `<p class="r-src">Quelle: ${esc(r.source)}</p>` : ""}
         <div class="facts">
           ${r.minutes ? `<span class="fact"><b>${r.minutes}</b>Minuten</span>` : ""}
           ${r.servings ? `<span class="fact"><button class="x" id="less" aria-label="Weniger Personen">−</button><b id="srv" aria-live="polite">${servings}</b><span id="srv-l">${servings === 1 ? "Person" : "Personen"}</span><button class="x" id="more" aria-label="Mehr Personen">+</button></span>` : ""}
           ${kcal ? `<span class="fact fact--kcal" title="grob aus den Zutaten geschätzt"><b>${fmtKcal(kcal.perServing ?? kcal.total)}</b>kcal ${kcal.perServing ? "pro Person" : "gesamt"}</span>` : ""}
+          ${kcal && !kcal.unknown ? `<span class="fact fact--macro" title="grob aus den Zutaten geschätzt, ${kcal.perServing ? "pro Person" : "für das ganze Rezept"}">
+            <b>${Math.round(kcal.proteinPer ?? kcal.protein)}</b>g Eiweiß <b>${Math.round(kcal.carbsPer ?? kcal.carbs)}</b>g KH</span>` : ""}
         </div>
         ${state.user && (r.ingredients.length || state.partner) ? `<div class="r-btns">
           ${r.ingredients.length ? `<button class="btn btn--big btn--red" id="cart">${CART}Auf den Zettel</button>` : ""}
@@ -595,7 +720,7 @@ function showRecipe(id) {
         <h2 class="box-h">Zutaten</h2>
         <p class="for" id="for">${servings ? `für ${servings} ${servings === 1 ? "Person" : "Personen"}` : "&nbsp;"}</p>
         <ul class="ings" id="bon">${bonHtml()}</ul>
-        ${kcal ? `<p class="kcal-note">Kalorien grob aus den Zutaten geschätzt${kcal.missing.length
+        ${kcal ? `<p class="kcal-note">Kalorien${kcal.unknown ? "" : ", Eiweiß und Kohlenhydrate"} grob aus den Zutaten geschätzt${kcal.missing.length
           ? ` – nicht mitgerechnet: ${esc(kcal.missing.join(", "))}` : ""}.</p>` : ""}
         ${state.user ? `<div class="deals" id="deals" aria-live="polite"><p class="deals-wait">Suche Angebote …</p></div>` : ""}
       </section>` : ""}
@@ -609,6 +734,12 @@ function showRecipe(id) {
       <a class="btn" href="#/bearbeiten/${r.id}">Bearbeiten</a>
       <button class="btn btn--danger" id="del">Löschen</button>
     </div>` : ""}`;
+
+  view.querySelectorAll("[data-go-diet]").forEach((a) => a.addEventListener("click", () => {
+    state.diets = [a.dataset.goDiet];
+    state.cat = "";
+    state.q = "";
+  }));
 
   const setServings = (n) => {
     servings = Math.max(1, Math.min(100, n));
@@ -810,6 +941,9 @@ function editorHtml(r, notice) {
           <label class="field"><span class="flabel">Minuten</span>
             <input class="input" type="number" id="minutes" min="1" value="${esc(r.minutes ?? "")}"></label>
         </div>
+        <div class="rescale" id="rescale" aria-live="polite"></div>
+        <div class="field"><span class="flabel">Ernährung <small>· erkennt die Seite aus Zutaten und Zeit, antippen zum Korrigieren</small></span>
+          <div class="diet-pick" id="diet-pick"></div></div>
         <label class="field"><span class="flabel">Zutaten <small>· eine pro Zeile, z. B. „250 g Linsen“</small></span>
           <textarea class="input" id="ings" rows="9">${esc(r.ingredients.map(toLine).join("\n"))}</textarea></label>
         <label class="field"><span class="flabel">Zubereitung <small>· ein Schritt pro Zeile</small></span>
@@ -851,6 +985,56 @@ function editorHtml(r, notice) {
 
 function bindEditor(r) {
   let image = r.image || null, page = 1, lastQuery = "", noImage = false;
+  // Ernährung: erkannt aus dem, was gerade im Formular steht; tags hält nur die Handkorrekturen
+  const tags = { ...(r.tags || {}) };
+  const val = (k) => document.getElementById(k).value;
+  const formRecipe = () => ({ servings: Number(val("servings")) || null, minutes: Number(val("minutes")) || null,
+    ingredients: val("ings").split("\n").map(parseLine).filter(Boolean) });
+  const pick = document.getElementById("diet-pick");
+  const showDiets = () => {
+    const probe = { ...formRecipe(), tags }, on = dietOf(probe), auto = dietAuto(probe);
+    pick.innerHTML = DIETS.map((d) => `<button type="button" class="meat" data-diet="${esc(d)}" aria-pressed="${on[d]}"
+      style="--c:${DIET_COLORS[d]}" title="${esc(DIET_HINTS[d])}"><span class="nm">${esc(d)}</span>${
+        on[d] !== auto[d] ? `<span class="ct" title="von dir umgestellt, erkannt wäre: ${auto[d] ? "ja" : "nein"}">✎</span>` : ""}</button>`).join("");
+  };
+  const setFix = (d, want, auto) => { if (want === auto[d]) delete tags[d]; else tags[d] = want; };
+  pick.onclick = (e) => {
+    const btn = e.target.closest("[data-diet]");
+    if (!btn) return;
+    const probe = { ...formRecipe(), tags }, auto = dietAuto(probe), d = btn.dataset.diet, want = !dietOf(probe)[d];
+    setFix(d, want, auto);
+    // Vegan heißt vegetarisch; nicht vegetarisch heißt nicht vegan
+    if (d === "Vegan" && want && tags["Vegetarisch"] === false) delete tags["Vegetarisch"];
+    if (d === "Vegetarisch" && !want) setFix("Vegan", false, auto);
+    showDiets();
+  };
+  ["ings", "servings", "minutes"].forEach((k) => document.getElementById(k).addEventListener("input", showDiets));
+  showDiets();
+
+  // Umrechnen: Zutaten stehen für "base" Personen. Andere Zahl eingetippt → auf die umrechnen,
+  // sonst die Standard-Personenzahl aus den Einstellungen anbieten.
+  let base = r.servings || null;
+  const rescale = document.getElementById("rescale"), servingsInput = document.getElementById("servings");
+  const showRescale = () => {
+    const n = Number(servingsInput.value) || null;
+    const target = n && n !== base ? n : state.servings;
+    const hasAmounts = val("ings").split("\n").map(parseLine).some((i) => i && i.amount != null);
+    if (!base || !hasAmounts || target === base || target > 100) { rescale.innerHTML = ""; return; }
+    rescale.innerHTML = `<button type="button" class="btn btn--light" id="do-rescale">Zutaten von ${base} auf ${target} Personen umrechnen</button>
+      ${n && n !== base ? `<span class="hint">oder so lassen: dann gelten die Mengen ab jetzt für ${plural(n, "Person", "Personen")}</span>` : ""}`;
+    document.getElementById("do-rescale").onclick = () => {
+      const ings = val("ings").split("\n").map(parseLine).filter(Boolean);
+      document.getElementById("ings").value = scaleIngredients(ings, target / base).map(toLine).join("\n");
+      servingsInput.value = base = target;
+      showRescale();
+      showDiets();
+      note(`Zutaten auf ${target} Personen umgerechnet${/\d/.test(val("steps")) ? " – Mengen in der Zubereitung bitte selbst prüfen" : ""}.`);
+    };
+  };
+  servingsInput.addEventListener("input", showRescale);
+  document.getElementById("ings").addEventListener("input", showRescale);
+  showRescale();
+
   const imageQuery = r.image_query || "";
   const current = document.getElementById("pick-current"), msg = document.getElementById("pick-msg");
   const choices = document.getElementById("pick-choices"), more = document.getElementById("pick-more");
@@ -925,12 +1109,11 @@ function bindEditor(r) {
 
   document.getElementById("editor").onsubmit = async (e) => {
     e.preventDefault();
-    const val = (k) => document.getElementById(k).value;
     const data = {
       title: val("title"), servings: val("servings"), minutes: val("minutes"), category: val("category"),
       ingredients: val("ings").split("\n").map(parseLine).filter(Boolean),
       steps: val("steps").split("\n").map((s) => s.trim().replace(/^\d+[.)]\s*/, "")).filter(Boolean),
-      notes: val("notes"), source: val("source"), image, image_query: imageQuery, no_image: noImage,
+      notes: val("notes"), source: val("source"), image, image_query: imageQuery, no_image: noImage, tags,
     };
     const btn = e.submitter;
     if (btn) btn.disabled = true;
@@ -953,7 +1136,7 @@ function showEdit(id) {
   bindEditor(r);
 }
 
-const EMPTY = { title: "", category: "", servings: null, minutes: null, ingredients: [], steps: [], notes: "", source: "", image: null };
+const EMPTY = { title: "", category: "", servings: null, minutes: null, ingredients: [], steps: [], notes: "", source: "", image: null, tags: {} };
 const WAYS = [
   ["", "pen", "Selbst schreiben", "Von Hand eintippen"],
   ["bild", "image", "Aus Bild", "Screenshot oder Foto"],
@@ -1159,6 +1342,17 @@ async function showSettings() {
       </section>
 
       <section class="koma">
+        <h3>Personen</h3>
+        <p class="hint">Für wie viele ihr meistens kocht. KI-Vorschläge kommen in dieser Menge, und im Formular
+          gibt's einen Knopf, der ein Rezept darauf umrechnet.</p>
+        <div class="cols">
+          <label class="field"><span class="flabel">Personen</span>
+            <input class="input" type="number" id="std-servings" min="1" max="100" value="${s.servings}"></label>
+        </div>
+        <div class="btnrow" style="margin-top:4px"><button class="btn" id="save-servings">Speichern</button></div>
+      </section>
+
+      <section class="koma">
         <h3>Bilder</h3>
         <p class="hint">Fotos kommen von Unsplash. Den Key gibt's kostenlos auf unsplash.com/developers:
           „New Application“ anlegen und den <b>Access Key</b> hier eintragen.</p>
@@ -1216,6 +1410,14 @@ async function showSettings() {
       noteError(err);
     }
   });
+
+  document.getElementById("save-servings").onclick = async () => {
+    try {
+      const res = await api("/settings", "PUT", { servings: document.getElementById("std-servings").value });
+      state.servings = res.servings;
+      note(`Gespeichert: ${plural(res.servings, "Person", "Personen")}.`);
+    } catch (err) { noteError(err); }
+  };
 
   const saveAI = async (extra = {}) => {
     const providers = {};
@@ -1330,6 +1532,7 @@ window.addEventListener("hashchange", route);
   state.publicShopping = me.public_shopping;
   state.partner = me.partner || "";
   state.categories = me.categories || [];
+  state.servings = me.servings || 3;
   const show = (sel, on) => document.querySelectorAll(sel).forEach((a) => { a.hidden = !on; });
   show("[data-private]", state.user);
   show("[data-guest]", !state.user);

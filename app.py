@@ -92,6 +92,11 @@ def ai_limit_per_hour(s: db.Store) -> int:
     return db.to_int(s.setting("ai.limit"), 1, 10_000) or config.AI_LIMIT_PER_HOUR
 
 
+def default_servings(s: db.Store) -> int:
+    """Für wie viele Personen meistens gekocht wird: KI-Vorschläge kommen so, das Formular bietet das Umrechnen an."""
+    return db.to_int(s.setting("servings"), 1, 100) or 3
+
+
 def is_https(request: web.Request) -> bool:
     return request.secure or request.headers.get("X-Forwarded-Proto") == "https"
 
@@ -207,6 +212,7 @@ async def me(request: web.Request) -> web.Response:
     s = store(request)
     return web.json_response({"user": request["user"], "public": is_public(s),
                               "public_shopping": is_shopping_public(s), "categories": db.CATEGORIES,
+                              "servings": default_servings(s),
                               "partner": config.PARTNER_URL if request["user"] else ""})
 
 
@@ -417,7 +423,7 @@ async def ai_draft(request: web.Request) -> web.Response:
             if not wish:
                 return fail(400, "Was soll es geben?")
             ai_limit.hit("all")
-            recipe = await ai.generate(provider, wish)
+            recipe = await ai.generate(provider, wish, default_servings(s))
         elif kind == "text":
             text = str(data.get("text") or "").strip()[:20000]
             if not text:
@@ -452,7 +458,8 @@ def settings_view(s: db.Store) -> dict:
                 "key_source": "seite" if s.setting("unsplash.key") else ("env" if config.UNSPLASH_KEY else ""),
                 "missing": sum(1 for r in s.recipes() if not r["image"])}
     return {"public": is_public(s), "public_shopping": is_shopping_public(s), "ai_default": ai.default_id(s),
-            "ai_limit": ai_limit_per_hour(s), "providers": providers, "unsplash": unsplash}
+            "ai_limit": ai_limit_per_hour(s), "providers": providers, "unsplash": unsplash,
+            "servings": default_servings(s)}
 
 
 async def get_settings(request: web.Request) -> web.Response:
@@ -474,6 +481,11 @@ async def save_settings(request: web.Request) -> web.Response:
         if limit is None:
             return fail(400, "Anfragen pro Stunde: eine Zahl von 1 bis 10000")
         changes["ai.limit"] = str(limit)
+    if "servings" in data:
+        servings = db.to_int(data["servings"], 1, 100)
+        if servings is None:
+            return fail(400, "Personen: eine Zahl von 1 bis 100")
+        changes["servings"] = str(servings)
     unsplash = str(data.get("unsplash_key") or "").strip()
     if unsplash:
         changes["unsplash.key"] = unsplash[:200]

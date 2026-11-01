@@ -141,7 +141,8 @@ async def _chat(provider: dict, system: str, user_content, temperature: float, j
         raise AIError(f"{provider['label']}: unerwartete Antwort") from None
 
 
-async def generate(provider: dict, wish: str) -> dict:
+async def generate(provider: dict, wish: str, servings: int) -> dict:
+    wish += f"\nMengen für {servings} Personen, außer hier steht eine andere Zahl."
     return _parse(await _chat(provider, GENERATE, f"Rezeptwunsch: {wish}", 0.8))
 
 

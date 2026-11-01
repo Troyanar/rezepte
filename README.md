@@ -48,6 +48,33 @@ The browser shrinks it first (1600 px for the recipe, 600 px for the list); it i
 `fotos/` next to the database (change with `PHOTO_DIR` in `.env`). Photos no longer used by any recipe are
 removed by the server after an hour. **When backing up or moving, copy `rezepte.db` and `fotos/` together.**
 
+## Servings
+
+Under **Settings → Personen** you set how many people you usually cook for (default 3). AI suggestions come in that
+amount, and the recipe form offers a button "Zutaten von 2 auf 3 Personen umrechnen". Typing another number into
+"Personen" offers to convert to that number instead. Amounts are rounded the way you weigh things: grams to 5 or 10,
+spoons to halves, eggs to whole ones. Numbers inside the preparation steps are not changed.
+On the recipe page, − and + still scale the amounts just for viewing and for the shopping list.
+
+## Diet tags
+
+Recipes get the tags **Vegan**, **Vegetarisch**, **Low Carb**, **High Protein** and **Schnell** automatically;
+the row "Ernährung" above the list filters by them (several at once = all of them must apply).
+The site works them out from the ingredients, the same way it estimates calories:
+
+| Tag          | Rule                                                                                    |
+|--------------|-----------------------------------------------------------------------------------------|
+| Vegetarisch  | no meat or fish, also no meat broth, fish/oyster sauce, Worcester sauce or gelatine     |
+| Vegan        | vegetarian and no milk products, egg, honey or mayo (unless "vegan", oat milk, …)        |
+| Low Carb     | at most 20 g carbs per person and under 30 % of the calories (no servings: under 20 %)  |
+| High Protein | at least 25 % of the calories from protein and 20 g per person                          |
+| Schnell      | ready in 30 minutes or less                                                             |
+
+Low Carb and High Protein are only given when every measured ingredient is known to the nutrient table
+and no side dish (rice, noodles, bread …) is listed without an amount.
+If a tag is wrong, tap it in the recipe form: the change is stored with the recipe (✎) and wins over the detection.
+Tapping it back to what was detected removes the correction again.
+
 ## Setting up the AI
 
 Easiest under **settings → ai**: enter a key and click [test].

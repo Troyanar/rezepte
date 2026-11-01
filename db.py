@@ -59,8 +59,13 @@ LIMITS = {"title": 200, "source": 300, "notes": 4000, "name": 200, "unit": 20, "
 
 CATEGORIES = ["Frühstück", "Suppen", "Salate", "Hauptgerichte", "Beilagen", "Snacks", "Kuchen & Süßes", "Getränke"]
 
+# Ernährungs-Tags erkennt die Seite selbst aus den Zutaten; gespeichert werden nur Handkorrekturen
+# ({"Vegan": false} = "ist nicht vegan, auch wenn es so aussieht")
+DIETS = ["Vegan", "Vegetarisch", "Low Carb", "High Protein", "Schnell"]
+
 # Spalten, die nach der ersten Version dazugekommen sind (werden beim Start nachgerüstet)
-NEW_COLUMNS = {"category": "TEXT NOT NULL DEFAULT ''", "image": "TEXT NOT NULL DEFAULT ''"}
+NEW_COLUMNS = {"category": "TEXT NOT NULL DEFAULT ''", "image": "TEXT NOT NULL DEFAULT ''",
+               "tags": "TEXT NOT NULL DEFAULT '{}'"}
 
 
 def _now() -> str:
@@ -133,6 +138,12 @@ def clean_image(raw) -> dict | None:
             "download": download[:300] if download.startswith("https://api.unsplash.com/photos/") else ""}
 
 
+def clean_tags(raw) -> dict:
+    if not isinstance(raw, dict):
+        return {}
+    return {d: raw[d] for d in DIETS if isinstance(raw.get(d), bool)}
+
+
 def clean_recipe(raw) -> dict:
     """Prüft und kürzt Eingaben vom Browser oder von der KI. Wirft ValueError ohne Titel."""
     if not isinstance(raw, dict):
@@ -153,6 +164,7 @@ def clean_recipe(raw) -> dict:
         "notes": _text(raw.get("notes"), LIMITS["notes"]),
         "category": raw.get("category") if raw.get("category") in CATEGORIES else "",
         "image": clean_image(raw.get("image")),
+        "tags": clean_tags(raw.get("tags")),
         # nur ein Suchbegriff für das Foto, wird nicht gespeichert
         "image_query": _text(raw.get("image_query"), 80),
     }
@@ -200,6 +212,7 @@ class Store:
         data["ingredients"] = json.loads(data["ingredients"])
         data["steps"] = json.loads(data["steps"])
         data["image"] = json.loads(data["image"]) if data["image"] else None
+        data["tags"] = json.loads(data["tags"] or "{}")
         return data
 
     def recipes(self) -> list[dict]:
@@ -217,18 +230,19 @@ class Store:
             data["title"], data["servings"], data["minutes"], data["source"],
             json.dumps(data["ingredients"], ensure_ascii=False),
             json.dumps(data["steps"], ensure_ascii=False), data["notes"], data["category"],
-            json.dumps(data["image"], ensure_ascii=False) if data["image"] else "", _now(),
+            json.dumps(data["image"], ensure_ascii=False) if data["image"] else "",
+            json.dumps(data["tags"], ensure_ascii=False), _now(),
         )
         with self.conn:
             if recipe_id is None:
                 cur = self.conn.execute(
                     "INSERT INTO recipes (title, servings, minutes, source, ingredients, steps, notes, category, image,"
-                    " updated, created) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (*values, _now()))
+                    " tags, updated, created) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (*values, _now()))
                 recipe_id = cur.lastrowid
             else:
                 cur = self.conn.execute(
                     "UPDATE recipes SET title=?, servings=?, minutes=?, source=?, ingredients=?, steps=?, notes=?,"
-                    " category=?, image=?, updated=? WHERE id=?", (*values, recipe_id))
+                    " category=?, image=?, tags=?, updated=? WHERE id=?", (*values, recipe_id))
                 if cur.rowcount == 0:
                     return None
         return self.recipe(recipe_id)
