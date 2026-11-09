@@ -13,6 +13,7 @@ import sys
 import time
 from datetime import date
 
+import httpx
 from aiohttp import web
 
 import ai
@@ -212,8 +213,7 @@ async def me(request: web.Request) -> web.Response:
     s = store(request)
     return web.json_response({"user": request["user"], "public": is_public(s),
                               "public_shopping": is_shopping_public(s), "categories": db.CATEGORIES,
-                              "servings": default_servings(s),
-                              "partner": config.PARTNER_URL if request["user"] else ""})
+                              "servings": default_servings(s)})
 
 
 # --- Rezepte ---------------------------------------------------------------------
@@ -443,6 +443,14 @@ async def ai_draft(request: web.Request) -> web.Response:
 
 
 # --- Einstellungen ------------------------------------------------------------------
+def offers_location(s: db.Store) -> angebote.Location:
+    """Ort für die Angebote aus den Einstellungen; noch keiner gesetzt → Zweibrücken."""
+    try:
+        return angebote.Location(**json.loads(s.setting("offers.location")))
+    except (ValueError, TypeError):
+        return angebote.DEFAULT_LOCATION
+
+
 def settings_view(s: db.Store) -> dict:
     providers = []
     for p in ai.providers(s).values():
@@ -459,7 +467,7 @@ def settings_view(s: db.Store) -> dict:
                 "missing": sum(1 for r in s.recipes() if not r["image"])}
     return {"public": is_public(s), "public_shopping": is_shopping_public(s), "ai_default": ai.default_id(s),
             "ai_limit": ai_limit_per_hour(s), "providers": providers, "unsplash": unsplash,
-            "servings": default_servings(s)}
+            "servings": default_servings(s), "location": vars(offers_location(s))}
 
 
 async def get_settings(request: web.Request) -> web.Response:
@@ -486,6 +494,15 @@ async def save_settings(request: web.Request) -> web.Response:
         if servings is None:
             return fail(400, "Personen: eine Zahl von 1 bis 100")
         changes["servings"] = str(servings)
+    location = None
+    if str(data.get("location") or "").strip():
+        try:
+            location = await angebote.find_location(str(data["location"])[:100])
+        except httpx.HTTPError:
+            return fail(502, "Die Ortssuche ist gerade nicht erreichbar, bitte später nochmal")
+        if not location:
+            return fail(400, "Den Ort kenne ich nicht. Am sichersten klappt's mit der Postleitzahl.")
+        changes["offers.location"] = json.dumps(vars(location), ensure_ascii=False)
     unsplash = str(data.get("unsplash_key") or "").strip()
     if unsplash:
         changes["unsplash.key"] = unsplash[:200]
@@ -508,6 +525,9 @@ async def save_settings(request: web.Request) -> web.Response:
             changes[f"ai.{pid}.model"] = model if model and model != config.AI_PROVIDERS[pid]["model"] else None
     for key, value in changes.items():
         s.set_setting(key, value)
+    if location:
+        request.app[offers_key].set_location(location)
+        request.app[offers_key].refresh_kaufda()
     return web.json_response(settings_view(s))
 
 
@@ -547,8 +567,8 @@ def make_app() -> web.Application:
     prune_photos(app[store_key])  # Reste von abgebrochenen Formularen
 
     async def offers_ctx(app: web.Application):
-        app[offers_key] = angebote.Finder(config.OFFERS_ZIP, config.OFFERS_KAUFDA_CITY, config.OFFERS_LAT,
-                                          config.OFFERS_LNG, config.OFFERS_RETAILERS, config.OFFERS_KAUFDA_RETAILERS)
+        app[offers_key] = angebote.Finder(offers_location(app[store_key]), config.OFFERS_RETAILERS,
+                                          config.OFFERS_KAUFDA_RETAILERS)
         app[offers_key].refresh_kaufda()
         yield
         await app[offers_key].close()

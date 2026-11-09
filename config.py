@@ -21,13 +21,6 @@ def _int_env(name: str, default: int, lo: int, hi: int) -> int:
     return value if lo <= value <= hi else default
 
 
-def _float_env(name: str, default: float) -> float:
-    try:
-        return float(os.getenv(name, str(default)))
-    except ValueError:
-        return default
-
-
 HOST = os.getenv("HOST", "127.0.0.1")
 PORT = _int_env("PORT", 8300, 1, 65535)
 DB_PATH = Path(os.getenv("DB_PATH", BASE_DIR / "rezepte.db"))
@@ -65,17 +58,10 @@ AI_PROVIDERS = {
 }
 AI_DEFAULT = os.getenv("AI_DEFAULT", "").strip()
 
-# Supermarkt-Angebote zu den Zutaten (wie beim Angebote-Bot: Zweibrücken)
-OFFERS_ZIP = os.getenv("OFFERS_ZIP", "").strip() or "66482"
-OFFERS_KAUFDA_CITY = os.getenv("OFFERS_KAUFDA_CITY", "").strip() or "Zweibruecken"
-OFFERS_LAT = _float_env("OFFERS_LAT", 49.2497)
-OFFERS_LNG = _float_env("OFFERS_LNG", 7.3606)
+# Supermarkt-Angebote zu den Zutaten. Der Ort wird auf der Seite unter "einstellungen" gesetzt.
 OFFERS_RETAILERS = [r.strip() for r in (os.getenv("OFFERS_RETAILERS", "").strip()
                     or "Lidl,Aldi Süd,Aldi Nord,Kaufland,Rewe,Edeka,Netto Marken-Discount,Penny").split(",") if r.strip()]
 # Märkte, die Marktguru nicht hat und die über kaufDA kommen (leer = aus)
 OFFERS_KAUFDA_RETAILERS = [r.strip() for r in os.getenv("OFFERS_KAUFDA_RETAILERS", "Globus").split(",") if r.strip()]
 UNSPLASH_KEY = os.getenv("UNSPLASH_ACCESS_KEY", "").strip()
 AI_LIMIT_PER_HOUR = _int_env("AI_LIMIT_PER_HOUR", 40, 1, 10_000)
-# Digimon-Partner: "Gekocht!"-Knopf im Rezept öffnet diese Seite (leer = Knopf aus)
-_partner = os.getenv("PARTNER_URL", "").strip().rstrip("/")
-PARTNER_URL = _partner if _partner.startswith(("https://", "http://localhost", "http://127.0.0.1")) else ""

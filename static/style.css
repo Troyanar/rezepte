@@ -365,8 +365,6 @@ svg { flex: none; }
 .label--diet:nth-child(odd) { transform: rotate(-1.5deg); }
 .label--diet:hover { background: var(--ink); color: #fff; }
 .r-btns { display: flex; flex-wrap: wrap; gap: 12px 16px; }
-#cooked { background: var(--yellow); color: var(--ink); text-decoration: none; }
-#cooked:hover { background: var(--ink); color: #fff; }
 .kcal-note { margin: 14px 0 0; font-size: 13px; line-height: 1.45; color: var(--muted); }
 
 .rp-body { display: grid; grid-template-columns: minmax(300px, 4fr) minmax(0, 8fr); gap: 24px; align-items: start; margin-top: 28px; }

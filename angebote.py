@@ -224,6 +224,53 @@ def _kd_offer(c: dict) -> Offer | None:
     )
 
 
+# --- Ort (Einstellungen) --------------------------------------------------------------------
+NOMINATIM = "https://nominatim.openstreetmap.org"
+NOMINATIM_HEADERS = {"User-Agent": "rezepte-privat/1.0", "Accept-Language": "de"}
+
+
+@dataclass
+class Location:
+    zip_code: str
+    city: str
+    lat: float
+    lng: float
+
+    @property
+    def kaufda_city(self) -> str:
+        """kaufDA schreibt Städte ohne Umlaute und mit Bindestrichen: "Frankfurt am Main" → "Frankfurt-am-Main"."""
+        slug = self.city
+        for a, b in (("ä", "ae"), ("ö", "oe"), ("ü", "ue"), ("Ä", "Ae"), ("Ö", "Oe"), ("Ü", "Ue"), ("ß", "ss")):
+            slug = slug.replace(a, b)
+        return re.sub(r"[^A-Za-z0-9]+", "-", slug).strip("-")
+
+
+DEFAULT_LOCATION = Location("66482", "Zweibrücken", 49.2497, 7.3606)
+
+
+async def find_location(query: str) -> Location | None:
+    """Postleitzahl oder Ortsname → Ort mit PLZ und Koordinaten (OpenStreetMap, nur Deutschland)."""
+    query = query.strip()
+    params = {"countrycodes": "de", "format": "jsonv2", "addressdetails": 1, "limit": 1}
+    params |= {"postalcode": query} if re.fullmatch(r"\d{5}", query) else {"q": query}
+    async with httpx.AsyncClient(timeout=15, headers=NOMINATIM_HEADERS) as http:
+        found = (await http.get(f"{NOMINATIM}/search", params=params)).raise_for_status().json()
+        if not found:
+            return None
+        hit = found[0]
+        address = hit.get("address") or {}
+        zip_code = query if query.isdigit() else address.get("postcode", "")
+        if not re.fullmatch(r"\d{5}", zip_code):
+            # Große Städte haben keine eigene PLZ: die vom Stadtzentrum nehmen
+            back = (await http.get(f"{NOMINATIM}/reverse", params={
+                "lat": hit["lat"], "lon": hit["lon"], "format": "jsonv2", "zoom": 18})).raise_for_status().json()
+            zip_code = ((back.get("address") or {}).get("postcode") or "")[:5]
+    city = next((address[k] for k in ("city", "town", "village", "municipality") if address.get(k)), "")
+    if not city or not re.fullmatch(r"\d{5}", zip_code):
+        return None
+    return Location(zip_code, city, round(float(hit["lat"]), 4), round(float(hit["lon"]), 4))
+
+
 # --- Zutat → passende Angebote -------------------------------------------------------------
 # Gibt es im Prospekt praktisch nie einzeln oder lohnt nicht
 SKIP = {"salz", "pfeffer", "wasser", "eiswasser", "leitungswasser", "eiswürfel", "meersalz", "salzwasser"}
@@ -314,17 +361,25 @@ def best_offers(term: str, offers: list[Offer], limit: int = PER_INGREDIENT) -> 
 class Finder:
     """Hält die Verbindungen und den Zwischenspeicher. Ein Exemplar pro Server."""
 
-    def __init__(self, zip_code: str, kaufda_city: str, lat: float, lng: float,
-                 retailers: list[str], kaufda_retailers: list[str]):
-        self.zip_code, self.retailers = zip_code, retailers
+    def __init__(self, location: Location, retailers: list[str], kaufda_retailers: list[str]):
+        self.retailers, self.kaufda_retailers = retailers, kaufda_retailers
         self.http = httpx.AsyncClient(timeout=20, follow_redirects=True)
         self.marktguru = MarktguruClient(self.http)
-        self.kaufda = KaufdaClient(self.http, kaufda_city, lat, lng, kaufda_retailers) if kaufda_retailers else None
-        self._searches: dict[str, tuple[float, list[Offer]]] = {}
         self._locks: dict[str, asyncio.Lock] = {}
         self._limit = asyncio.Semaphore(4)  # Marktguru nicht mit zehn Anfragen gleichzeitig bombardieren
-        self._kaufda: tuple[float, list[Offer]] = (0.0, [])
         self._kaufda_task: asyncio.Task | None = None
+        self.set_location(location)
+
+    def set_location(self, location: Location) -> None:
+        """Neuer Ort (aus den Einstellungen): alles Zwischengespeicherte gehört zum alten."""
+        if self._kaufda_task:
+            self._kaufda_task.cancel()
+            self._kaufda_task = None
+        self.zip_code = location.zip_code
+        self.kaufda = (KaufdaClient(self.http, location.kaufda_city, location.lat, location.lng, self.kaufda_retailers)
+                       if self.kaufda_retailers else None)
+        self._searches: dict[str, tuple[float, list[Offer]]] = {}
+        self._kaufda: tuple[float, list[Offer]] = (0.0, [])
         self.kaufda_status = "aus" if not self.kaufda else "lädt"
 
     async def close(self) -> None:

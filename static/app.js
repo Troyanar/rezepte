@@ -708,10 +708,8 @@ function showRecipe(id) {
           ${kcal && !kcal.unknown ? `<span class="fact fact--macro" title="grob aus den Zutaten geschätzt, ${kcal.perServing ? "pro Person" : "für das ganze Rezept"}">
             <b>${Math.round(kcal.proteinPer ?? kcal.protein)}</b>g Eiweiß <b>${Math.round(kcal.carbsPer ?? kcal.carbs)}</b>g KH</span>` : ""}
         </div>
-        ${state.user && (r.ingredients.length || state.partner) ? `<div class="r-btns">
-          ${r.ingredients.length ? `<button class="btn btn--big btn--red" id="cart">${CART}Auf den Zettel</button>` : ""}
-          ${state.partner ? `<a class="btn btn--big" id="cooked" href="${esc(state.partner)}/?gekocht=${encodeURIComponent(r.title)}"
-            target="_blank" rel="noopener" title="Öffnet deinen Digimon-Partner">Gekocht! Partner füttern</a>` : ""}
+        ${state.user && r.ingredients.length ? `<div class="r-btns">
+          <button class="btn btn--big btn--red" id="cart">${CART}Auf den Zettel</button>
         </div>` : ""}
       </div></div>
     </div>
@@ -1353,6 +1351,17 @@ async function showSettings() {
       </section>
 
       <section class="koma">
+        <h3>Angebote</h3>
+        <p class="hint">Aus welcher Gegend die Supermarkt-Angebote zu den Zutaten kommen.
+          Gerade: <b id="loc-now">${esc(s.location.city)} (${esc(s.location.zip_code)})</b></p>
+        <div class="cols">
+          <label class="field"><span class="flabel">PLZ oder Stadt</span>
+            <input class="input" type="text" id="loc" maxlength="100" placeholder="${esc(s.location.zip_code)}" spellcheck="false"></label>
+        </div>
+        <div class="btnrow" style="margin-top:4px"><button class="btn" id="save-loc">Speichern</button></div>
+      </section>
+
+      <section class="koma">
         <h3>Bilder</h3>
         <p class="hint">Fotos kommen von Unsplash. Den Key gibt's kostenlos auf unsplash.com/developers:
           „New Application“ anlegen und den <b>Access Key</b> hier eintragen.</p>
@@ -1410,6 +1419,22 @@ async function showSettings() {
       noteError(err);
     }
   });
+
+  const locInput = document.getElementById("loc");
+  document.getElementById("save-loc").onclick = async (e) => {
+    if (!locInput.value.trim()) return locInput.focus();
+    e.target.disabled = true;
+    try {
+      const { location: l } = await api("/settings", "PUT", { location: locInput.value });
+      document.getElementById("loc-now").textContent = `${l.city} (${l.zip_code})`;
+      locInput.value = "";
+      locInput.placeholder = l.zip_code;
+      state.shopOffersFor = "";  // Angebote zum Zettel neu holen
+      note(`Angebote kommen jetzt aus ${l.city}.`);
+    } catch (err) { noteError(err); }
+    e.target.disabled = false;
+  };
+  locInput.onkeydown = (e) => { if (e.key === "Enter") document.getElementById("save-loc").click(); };
 
   document.getElementById("save-servings").onclick = async () => {
     try {
@@ -1530,7 +1555,6 @@ window.addEventListener("hashchange", route);
   state.user = me.user;
   state.publicRecipes = me.public;
   state.publicShopping = me.public_shopping;
-  state.partner = me.partner || "";
   state.categories = me.categories || [];
   state.servings = me.servings || 3;
   const show = (sel, on) => document.querySelectorAll(sel).forEach((a) => { a.hidden = !on; });

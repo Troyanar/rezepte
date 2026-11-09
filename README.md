@@ -101,8 +101,8 @@ and on the right what is currently cheap where, sorted by store.
   Globus loads in the background at startup (about half a minute); until then only its deals are missing.
 - Salt, pepper and water are skipped. Matching uses the main noun ("rote Zwiebeln" finds
   "Zwiebeln" and "Speisezwiebeln" but not "Zwiebelmettwurst"); it is not perfectly accurate.
-- Place and stores: `OFFERS_ZIP`, `OFFERS_KAUFDA_CITY`, `OFFERS_LAT`/`OFFERS_LNG`, `OFFERS_RETAILERS`,
-  `OFFERS_KAUFDA_RETAILERS` in `.env` (default: Zweibrücken).
+- Place: on the site under **settings** (postcode or town name, looked up via OpenStreetMap; default: Zweibrücken).
+  Stores: `OFFERS_RETAILERS`, `OFFERS_KAUFDA_RETAILERS` in `.env`.
 - Both sources are unofficial and their terms forbid automated scraping. Private use only.
   The code (`angebote.py`) is taken from the Angebote-Bot; if a source changes there, update it here too.
 
